@@ -25,9 +25,11 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	"net"
 	"net/rpc"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/sigstore/cosign/v3/pkg/providers"
 	"github.com/sigstore/gitsign/internal/cache"
@@ -64,10 +66,12 @@ func NewIdentity(ctx context.Context, cfg *config.Config, in io.Reader, out io.W
 		if err != nil {
 			return nil, fmt.Errorf("error resolving cache path: %w", err)
 		}
-		rpcClient, err := rpc.Dial("unix", absPath)
+		conn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "unix", absPath)
 		if err != nil {
 			return nil, fmt.Errorf("error creating RPC socket client: %w", err)
 		}
+		rpcClient := rpc.NewClient(conn)
+		defer rpcClient.Close() // nolint:errcheck
 		roots, intermediates, err := fulcioroots.NewFromConfig(ctx, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("error loading certificate roots: %w", err)
@@ -100,7 +104,7 @@ func NewIdentity(ctx context.Context, cfg *config.Config, in io.Reader, out io.W
 	}
 
 	if cacheClient != nil {
-		if err := id.CacheCert(ctx, cacheClient); err != nil {
+		if err := id.CacheCert(ctx, cfg, cacheClient); err != nil {
 			fmt.Fprintf(out, "error storing identity in cache: %v\n", err) // nolint:errcheck
 		}
 	}
@@ -186,8 +190,8 @@ func (i *Identity) SignerVerifier() (*signerverifier.CertSignerVerifier, error) 
 	}, nil
 }
 
-func (i *Identity) CacheCert(ctx context.Context, cacheClient *cache.Client) error {
-	return cacheClient.StoreCert(ctx, i.PrivateKey, i.CertPEM, i.ChainPEM)
+func (i *Identity) CacheCert(ctx context.Context, cfg *config.Config, cacheClient *cache.Client) error {
+	return cacheClient.StoreCert(ctx, cfg, i.PrivateKey, i.CertPEM, i.ChainPEM)
 }
 
 // IdentityFactory holds reusable values for configuring how identities are created.

@@ -15,15 +15,11 @@
 package service
 
 import (
-	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/patrickmn/go-cache"
 	"github.com/sigstore/gitsign/internal/cache/api"
-	"github.com/sigstore/gitsign/internal/fulcio"
-	"github.com/sigstore/sigstore/pkg/cryptoutils"
 )
 
 type Service struct {
@@ -44,15 +40,12 @@ func NewService() *Service {
 
 func (s *Service) StoreCredential(req api.StoreCredentialRequest, resp *api.Credential) error {
 	fmt.Println("Store", req.ID)
-	if err := s.store.Add(req.ID, req.Credential, 10*time.Minute); err != nil {
-		return err
-	}
+	s.store.Set(req.ID, req.Credential, defaultExpiration)
 	*resp = *req.Credential
 	return nil
 }
 
 func (s *Service) GetCredential(req api.GetCredentialRequest, resp *api.Credential) error {
-	ctx := context.Background()
 	fmt.Println("Get", req.ID)
 	i, ok := s.store.Get(req.ID)
 	if ok {
@@ -65,31 +58,6 @@ func (s *Service) GetCredential(req api.GetCredentialRequest, resp *api.Credenti
 		return nil
 	}
 
-	if req.Config == nil {
-		// No config set, nothing to do.
-		return fmt.Errorf("%q not found", req.ID)
-	}
-
-	// If nothing is in the cache, fallback to interactive flow.
-	fmt.Println("gitsign-credential-cache: no cached credential found, falling back to interactive flow...")
-	idf := fulcio.NewIdentityFactory(os.Stdin, os.Stdout)
-	id, err := idf.NewIdentity(ctx, req.Config)
-	if err != nil {
-		return fmt.Errorf("error getting new identity: %w", err)
-	}
-	privPEM, err := cryptoutils.MarshalPrivateKeyToPEM(id.PrivateKey)
-	if err != nil {
-		return err
-	}
-	cred := &api.Credential{
-		PrivateKey: privPEM,
-		Cert:       id.CertPEM,
-		Chain:      id.ChainPEM,
-	}
-	if err := s.store.Add(req.ID, cred, 10*time.Minute); err != nil {
-		// We still generated the credential just fine, so only log the error.
-		fmt.Printf("error storing credential: %v\n", err)
-	}
-	*resp = *cred
-	return nil
+	// Authentication belongs to the foreground signer, never the RPC server.
+	return fmt.Errorf("%q not found", req.ID)
 }

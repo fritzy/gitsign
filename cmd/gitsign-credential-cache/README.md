@@ -24,8 +24,11 @@ If you understand the risks, read on!
 - Ephemeral Private Key
 - Fulcio Code Signing certificate + chain
 
-All data is stored in memory, keyed to your Git working directory (i.e.
-different repo paths will cache different keys)
+All data is stored in memory, keyed by the configured Git email (`user.email`)
+and signing configuration: OIDC issuer, client ID, connector, token provider,
+Fulcio URL, and additional Fulcio root path. Repositories and worktrees with the
+same settings share credentials, including worktrees created after login.
+Different identities or signing configurations have separate entries.
 
 The data that is cached would allow any user with access to sign artifacts as
 you, until the signing certificate expires, typically in ten minutes.
@@ -42,6 +45,37 @@ Note: The cache directory will change depending on your OS - the socket file
 that is used is output by `gitsign-credential-cache` when it is spawned. See
 [os.UserCacheDir](https://pkg.go.dev/os#UserCacheDir) for details on how the
 cache directory is selected.
+
+### Prime credentials at startup
+
+Authenticate using one or more repositories' configurations before the daemon
+starts accepting requests:
+
+```sh
+gitsign-credential-cache --prime ~/src/repo-a --prime ~/src/repo-b
+```
+
+Repeat `--prime` for each repository whose identity you need. Repositories with
+identical identity settings authenticate only once. Relative repository paths
+are resolved from the launch directory, and each repository's Git configuration
+and the usual environment overrides are honored. An invalid repository or
+failed login aborts startup.
+
+Startup priming supports browser, device, and configured token-provider flows.
+It never reads terminal input; browser failure cannot stop a background daemon
+with `SIGTTIN`. For manual verification-code entry, authenticate through a
+foreground signing command instead. Complete startup login before relying on
+the cache socket. A service may use repeated `--prime /absolute/repo/path`
+arguments if its environment can perform the configured login flow.
+
+After certificates expire (typically ten minutes), the next signing command
+authenticates in the foreground and replaces the shared cache entry. The daemon
+never performs authentication in response to an RPC request. Cache RPCs time
+out after five seconds, allowing the signer to fall back to foreground login.
+
+Install both `gitsign` and `gitsign-credential-cache` from this fork to use the
+shared identity keys. Existing upstream clients continue to use their old,
+per-directory entries. Restart the daemon after upgrading; the cache is in memory.
 
 ### Systemd service
 

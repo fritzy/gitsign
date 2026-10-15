@@ -15,23 +15,29 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
 	"net/rpc"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/coreos/go-systemd/v22/activation"
 	"github.com/spf13/pflag"
 
+	// Register the same token providers as the foreground signer.
+	_ "github.com/sigstore/cosign/v3/pkg/providers/all"
 	"github.com/sigstore/gitsign/internal/cache/service"
+	"github.com/sigstore/gitsign/internal/fulcio"
 	"github.com/sigstore/gitsign/pkg/version"
 )
 
 var (
 	// Action flags
 	versionFlag = pflag.BoolP("version", "v", false, "print the version number")
+	primeFlag   = pflag.StringArray("prime", nil, "prime credentials using a repository configuration (repeatable)")
 	systemdFlag = pflag.Bool("systemd-socket-activation", false, "use systemd socket activation")
 )
 
@@ -43,6 +49,15 @@ func main() {
 		fmt.Printf("gitsign-credential-cache version %s\n", v.GitVersion)
 
 		os.Exit(0)
+	}
+
+	cacheService := service.NewService()
+	if len(*primeFlag) > 0 {
+		// Browser/device login is allowed at startup; terminal input is never read.
+		factory := fulcio.NewIdentityFactory(strings.NewReader(""), os.Stderr)
+		if err := primeRepositories(context.Background(), cacheService, *primeFlag, factory); err != nil {
+			log.Fatalf("error priming credential cache: %v", err)
+		}
 	}
 
 	var connChan = make(chan net.Conn)
@@ -102,7 +117,7 @@ func main() {
 		go connToChan(l, connChan)
 	}
 	srv := rpc.NewServer()
-	if err := srv.Register(service.NewService()); err != nil {
+	if err := srv.Register(cacheService); err != nil {
 		log.Fatalf("error registering RPC service: %v", err)
 	}
 	for conn := range connChan {

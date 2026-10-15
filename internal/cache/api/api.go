@@ -28,6 +28,7 @@ type StoreCredentialRequest struct {
 }
 
 type GetCredentialRequest struct {
-	ID     string
+	ID string
+	// Retained for older clients; the server never authenticates on a miss.
 	Config *config.Config
 }

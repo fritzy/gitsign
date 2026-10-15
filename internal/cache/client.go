@@ -17,11 +17,12 @@ package cache
 import (
 	"context"
 	"crypto"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/asn1"
+	"encoding/json"
 	"fmt"
 	"net/rpc"
-	"os"
 	"time"
 
 	"github.com/sigstore/gitsign/internal/cache/api"
@@ -35,16 +36,13 @@ type Client struct {
 	Intermediates *x509.CertPool
 }
 
-func (c *Client) GetCredentials(_ context.Context, cfg *config.Config) (crypto.PrivateKey, []byte, []byte, error) {
-	id, err := id()
+func (c *Client) GetCredentials(ctx context.Context, cfg *config.Config) (crypto.PrivateKey, []byte, []byte, error) {
+	id, err := CredentialID(cfg)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("error getting credential ID: %w", err)
 	}
 	resp := new(api.Credential)
-	if err := c.Client.Call("Service.GetCredential", api.GetCredentialRequest{
-		ID:     id,
-		Config: cfg,
-	}, resp); err != nil {
+	if err := c.call(ctx, "Service.GetCredential", api.GetCredentialRequest{ID: id}, resp); err != nil {
 		return nil, nil, nil, err
 	}
 
@@ -86,8 +84,8 @@ func (c *Client) GetCredentials(_ context.Context, cfg *config.Config) (crypto.P
 	return privateKey, resp.Cert, resp.Chain, nil
 }
 
-func (c *Client) StoreCert(_ context.Context, priv crypto.PrivateKey, cert, chain []byte) error {
-	id, err := id()
+func (c *Client) StoreCert(ctx context.Context, cfg *config.Config, priv crypto.PrivateKey, cert, chain []byte) error {
+	id, err := CredentialID(cfg)
 	if err != nil {
 		return fmt.Errorf("error getting credential ID: %w", err)
 	}
@@ -96,7 +94,7 @@ func (c *Client) StoreCert(_ context.Context, priv crypto.PrivateKey, cert, chai
 		return err
 	}
 
-	if err := c.Client.Call("Service.StoreCredential", api.StoreCredentialRequest{
+	if err := c.call(ctx, "Service.StoreCredential", api.StoreCredentialRequest{
 		ID: id,
 		Credential: &api.Credential{
 			PrivateKey: privPEM,
@@ -110,15 +108,37 @@ func (c *Client) StoreCert(_ context.Context, priv crypto.PrivateKey, cert, chai
 	return err
 }
 
-func id() (string, error) {
-	// Prefix host name in case cache socket is being shared over a SSH session.
-	host, err := os.Hostname()
-	if err != nil {
-		return "", fmt.Errorf("error getting hostname: %w", err)
+// CredentialID groups credentials by configured identity and certificate issuer.
+func CredentialID(cfg *config.Config) (string, error) {
+	if cfg == nil {
+		return "", fmt.Errorf("missing signing configuration")
 	}
-	wd, err := os.Getwd()
+	data, err := json.Marshal([]string{
+		cfg.CommitterEmail, cfg.Issuer, cfg.ClientID, cfg.ConnectorID,
+		cfg.Fulcio, cfg.FulcioRoot, cfg.TokenProvider,
+	})
 	if err != nil {
-		return "", fmt.Errorf("error getting working directory: %w", err)
+		return "", err
 	}
-	return fmt.Sprintf("%s@%s", host, wd), nil
+	return fmt.Sprintf("identity-v1:%x", sha256.Sum256(data)), nil
+}
+
+const requestTimeout = 5 * time.Second
+
+func (c *Client) call(ctx context.Context, method string, args, reply any) error {
+	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	done := make(chan error, 1)
+	go func() { done <- c.Client.Call(method, args, reply) }()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		// Release the pending RPC and reject subsequent calls on the stalled connection.
+		_ = c.Client.Close()
+		return ctx.Err()
+	}
 }
