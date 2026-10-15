@@ -76,6 +76,7 @@ func TestGet(t *testing.T) {
 	t.Setenv("GITSIGN_CONNECTOR_ID", "bar")
 
 	want := &Config{
+		CredentialCache: "auto",
 		// Default overridden by config
 		Fulcio: "example.com",
 		// Overridden by config, then by env var
@@ -244,4 +245,39 @@ func TestRekorVersionEnv(t *testing.T) {
 			t.Error("expected error for non-numeric GITSIGN_REKOR_VERSION")
 		}
 	})
+}
+
+func TestCredentialCacheConfig(t *testing.T) {
+	oldExec := execFn
+	t.Cleanup(func() { execFn = oldExec })
+	customEnv := "/env/cache.sock"
+	emptyEnv := ""
+	for _, tc := range []struct {
+		name, gitConfig string
+		env             *string
+		want            string
+	}{
+		{name: "default", want: "auto"},
+		{name: "git path", gitConfig: "gitsign.credentialcache /git/cache.sock\n", want: "/git/cache.sock"},
+		{name: "disabled", gitConfig: "gitsign.credentialcache false\n", want: "false"},
+		{name: "environment wins", gitConfig: "gitsign.credentialcache /git/cache.sock\n", env: &customEnv, want: customEnv},
+		{name: "empty environment disables", gitConfig: "gitsign.credentialcache /git/cache.sock\n", env: &emptyEnv, want: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("GITSIGN_CREDENTIAL_CACHE", "")
+			if tc.env == nil {
+				os.Unsetenv("GITSIGN_CREDENTIAL_CACHE")
+			} else {
+				t.Setenv("GITSIGN_CREDENTIAL_CACHE", *tc.env)
+			}
+			execFn = func() (io.Reader, error) { return strings.NewReader(tc.gitConfig), nil }
+			cfg, err := Get()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.CredentialCache != tc.want {
+				t.Fatalf("CredentialCache = %q, want %q", cfg.CredentialCache, tc.want)
+			}
+		})
+	}
 }

@@ -37,7 +37,6 @@ you, until the signing certificate expires, typically in ten minutes.
 
 ```sh
 $ gitsign-credential-cache &
-$ export GITSIGN_CREDENTIAL_CACHE="$HOME/.cache/sigstore/gitsign/cache.sock"
 $ git commit ...
 ```
 
@@ -45,6 +44,27 @@ Note: The cache directory will change depending on your OS - the socket file
 that is used is output by `gitsign-credential-cache` when it is spawned. See
 [os.UserCacheDir](https://pkg.go.dev/os#UserCacheDir) for details on how the
 cache directory is selected.
+
+### Client configuration
+
+No environment variable is required. By default, gitsign discovers the socket
+in the same OS cache directory as the daemon (on Linux,
+`$XDG_CACHE_HOME/sigstore/gitsign/cache.sock`, or
+`$HOME/.cache/sigstore/gitsign/cache.sock` when `XDG_CACHE_HOME` is unset).
+If no daemon is listening, signing proceeds with foreground authentication.
+
+For a custom or SSH-forwarded socket, save the path in Git configuration:
+
+```sh
+git config --global gitsign.credentialCache /path/to/cache.sock
+```
+
+Use `git config --global gitsign.credentialCache false` to disable caching, or
+set it to `auto` to restore discovery. Repository-local settings work too.
+`GITSIGN_CREDENTIAL_CACHE`, when set, overrides Git configuration; an explicitly
+empty value disables caching. The socket setting does not change identity keys.
+An unavailable explicit socket emits a diagnostic and falls back to foreground
+login.
 
 ### Prime credentials at startup
 
@@ -114,8 +134,8 @@ systemctl --user enable --now gitsign-credential-cache.socket
 The credential cache socket can be forwarded over SSH using `RemoteForward`:
 
 ```sh
-[local]  $ ssh -R /home/wlynch/.sigstore/cache.sock:${GITSIGN_CREDENTIAL_CACHE} <host>
-[remote] $ export GITSIGN_CREDENTIAL_CACHE="/home/wlynch/.sigstore/cache.sock"
+[local]  $ ssh -R /home/wlynch/.sigstore/cache.sock:$HOME/.cache/sigstore/gitsign/cache.sock <host>
+[remote] $ git config --global gitsign.credentialCache /home/wlynch/.sigstore/cache.sock
 [remote] $ git commit ...
 ```
 
@@ -129,7 +149,7 @@ Host amazon
 ```
 
 where `/home/wlynch/.cache/sigstore/cache.sock` is the location of the socket path on
-the remote host (this can be changed, so long as the environment variable is
+the remote host (this can be changed, so long as the client configuration is
 also updated to match).
 
 #### Common issues
@@ -221,24 +241,8 @@ if [ ! -d "${gitsign_cache_dir}" ]; then
     mkdir -pv "${gitsign_cache_dir}"
 fi
 
-export GITSIGN_CREDENTIAL_CACHE="${gitsign_cache_path}"
+echo "Gitsign will discover the cache at ${gitsign_cache_path}"
 
-if [ -f "${HOME}/.zshrc" ]; then
-    shell_config_file="${HOME}/.zshrc"
-elif [ -f "${HOME}/.bashrc" ]; then
-    shell_config_file="${HOME}/.bashrc"
-else
-    echo "No .bashrc or .zshrc found in your home directory."
-    exit 1
-fi
-
-export_line="export GITSIGN_CREDENTIAL_CACHE=\"${gitsign_cache_path}\""
-if ! grep -qF -- "${export_line}" "${shell_config_file}"; then
-    echo "${export_line}" >> "${shell_config_file}"
-    echo "Added GITSIGN_CREDENTIAL_CACHE to ${shell_config_file}. Please restart your shell to apply the changes: 'source ${shell_config_file}'"
-else
-    echo "GITSIGN_CREDENTIAL_CACHE already exists in ${shell_config_file}!"
-fi
 ```
 
 Then run the following commands in your terminal:

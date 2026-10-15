@@ -111,6 +111,7 @@ func TestCredentialIDIsolation(t *testing.T) {
 			}
 		})
 	}
+	base.CredentialCache = "/another/cache.sock"
 	base.URLOpener = "other-browser {{.URL}}"
 	base.Rekor = "https://other-rekor.example.com"
 	base.CommitterName = "Different display name"

@@ -25,11 +25,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
-	"net"
-	"net/rpc"
-	"os"
-	"path/filepath"
-	"time"
 
 	"github.com/sigstore/cosign/v3/pkg/providers"
 	"github.com/sigstore/gitsign/internal/cache"
@@ -60,17 +55,11 @@ type Identity struct {
 func NewIdentity(ctx context.Context, cfg *config.Config, in io.Reader, out io.Writer) (*Identity, error) {
 	var cacheClient *cache.Client
 
-	cachePath := os.Getenv("GITSIGN_CREDENTIAL_CACHE")
-	if cachePath != "" {
-		absPath, err := filepath.Abs(cachePath)
-		if err != nil {
-			return nil, fmt.Errorf("error resolving cache path: %w", err)
-		}
-		conn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "unix", absPath)
-		if err != nil {
-			return nil, fmt.Errorf("error creating RPC socket client: %w", err)
-		}
-		rpcClient := rpc.NewClient(conn)
+	rpcClient, err := cache.Connect(ctx, cfg.CredentialCache)
+	if err != nil {
+		fmt.Fprintf(out, "error connecting to credential cache: %v\n", err) // nolint:errcheck
+	}
+	if rpcClient != nil {
 		defer rpcClient.Close() // nolint:errcheck
 		roots, intermediates, err := fulcioroots.NewFromConfig(ctx, cfg)
 		if err != nil {

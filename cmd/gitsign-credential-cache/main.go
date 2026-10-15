@@ -29,6 +29,7 @@ import (
 
 	// Register the same token providers as the foreground signer.
 	_ "github.com/sigstore/cosign/v3/pkg/providers/all"
+	"github.com/sigstore/gitsign/internal/cache"
 	"github.com/sigstore/gitsign/internal/cache/service"
 	"github.com/sigstore/gitsign/internal/fulcio"
 	"github.com/sigstore/gitsign/pkg/version"
@@ -84,17 +85,16 @@ func main() {
 			log.Fatalf("no valid systemd listeners found")
 		}
 	} else {
-		user, err := os.UserCacheDir()
+		path, err := cache.DefaultSocketPath()
 		if err != nil {
 			log.Fatalf("error getting user cache directory: %v", err)
 		}
 
-		dir := filepath.Join(user, "sigstore", "gitsign")
+		dir := filepath.Dir(path)
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			log.Fatalf("error creating %s: %v", dir, err)
 		}
 
-		path := filepath.Join(dir, "cache.sock")
 		if _, err := os.Stat(path); err == nil {
 			_ = os.Remove(path)
 		}

@@ -42,6 +42,8 @@ var (
 
 // Config represents configuration options for gitsign.
 type Config struct {
+	// CredentialCache is "auto", "false"/empty, or a Unix socket path.
+	CredentialCache string
 	// Address of Fulcio server
 	Fulcio string
 	// Path to PEM encoded certificate root for Fulcio.
@@ -156,10 +158,11 @@ func Get() (*Config, error) {
 
 	// Start with default config
 	out := &Config{
-		Fulcio:   "https://fulcio.sigstore.dev",
-		Rekor:    "https://rekor.sigstore.dev",
-		ClientID: "sigstore",
-		Issuer:   "https://oauth2.sigstore.dev/auth",
+		CredentialCache: "auto",
+		Fulcio:          "https://fulcio.sigstore.dev",
+		Rekor:           "https://rekor.sigstore.dev",
+		ClientID:        "sigstore",
+		Issuer:          "https://oauth2.sigstore.dev/auth",
 		// TODO: default to offline
 		RekorMode:        "online",
 		EnableSigstoreGo: true,
@@ -196,6 +199,10 @@ func Get() (*Config, error) {
 		out.TimestampCert = envOrValue(fmt.Sprintf("%s_TIMESTAMP_CERT_CHAIN", prefix), out.TimestampCert)
 		out.Autoclose = envOrValue(fmt.Sprintf("%s_AUTOCLOSE", prefix), fmt.Sprintf("%t", out.Autoclose)) == "true"
 		out.AutocloseTimeout, _ = strconv.Atoi(envOrValue(fmt.Sprintf("%s_AUTOCLOSE_TIMEOUT", prefix), fmt.Sprintf("%d", out.AutocloseTimeout)))
+	}
+
+	if value, ok := os.LookupEnv("GITSIGN_CREDENTIAL_CACHE"); ok {
+		out.CredentialCache = value
 	}
 
 	out.LogPath = envOrValue("GITSIGN_LOG", out.LogPath)
@@ -284,6 +291,8 @@ func parseConfig(r io.Reader) map[string]string {
 func applyGitOptions(out *Config, cfg map[string]string) {
 	for k, v := range cfg {
 		switch {
+		case strings.EqualFold(k, "gitsign.credentialCache"):
+			out.CredentialCache = v
 		case strings.EqualFold(k, "user.name"):
 			out.CommitterName = v
 		case strings.EqualFold(k, "user.email"):
