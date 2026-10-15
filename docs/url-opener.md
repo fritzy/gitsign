@@ -33,6 +33,28 @@ A few things to note:
 - **Fallback still works.** If the command fails to run, Gitsign falls back to
   the out-of-band flow and prints the URL for you to open manually.
 
+## Selecting a Google account
+
+```sh
+git config --global gitsign.connectorID https://accounts.google.com
+git config --global gitsign.loginHint work@example.com
+```
+
+The hint selects an already signed-in account; Google may still require consent
+or reauthentication. It does not enforce the certificate identity. Use
+`gitsign.matchCommitter` when the signer must match the Git committer.
+
+The public Sigstore service drops login hints on its Google redirect. Gitsign
+resolves that redirect and adds the hint to Google's authorization URL. A
+short-lived loopback redirect preserves the original `redirect_uri` for SSH
+browser relays; relays must forward both the URL's port and its callback port.
+If redirect resolution fails, the normal browser login remains available.
+Other issuers receive the standard `login_hint` parameter without prefetching.
+Device and automated token-provider flows are unchanged.
+
+`GITSIGN_LOGIN_HINT` overrides the Git setting; an empty value disables it.
+Changing the hint selects a separate credential-cache entry.
+
 ## Forcing a specific Chrome profile
 
 Chrome selects a profile with the `--profile-directory` flag, whose value is the

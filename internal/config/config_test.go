@@ -281,3 +281,31 @@ func TestCredentialCacheConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestLoginHint(t *testing.T) {
+	t.Cleanup(func() { execFn = realExec })
+	execFn = func() (io.Reader, error) { return strings.NewReader("gitsign.loginHint work@example.com\n"), nil }
+	cfg, err := Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LoginHint != "work@example.com" {
+		t.Fatalf("unexpected hint %q", cfg.LoginHint)
+	}
+	t.Setenv("GITSIGN_LOGIN_HINT", "other@example.com")
+	cfg, err = Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LoginHint != "other@example.com" {
+		t.Fatalf("unexpected hint %q", cfg.LoginHint)
+	}
+	t.Setenv("GITSIGN_LOGIN_HINT", "")
+	cfg, err = Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LoginHint != "" {
+		t.Fatalf("hint not disabled: %q", cfg.LoginHint)
+	}
+}

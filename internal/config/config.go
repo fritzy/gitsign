@@ -86,6 +86,8 @@ type Config struct {
 	// See https://github.com/sigstore/sigstore/blob/c645ceb9d075499f3a4b3f183d3a6864640fa956/pkg/oauthflow/flow.go#L49-L53
 	// for more details.
 	ConnectorID string
+	// Preferred account for interactive browser login.
+	LoginHint string
 	// TokenProviders select a OIDC token provider to use to fetch tokens. If not set, all providers are attempted.
 	// See https://github.com/sigstore/cosign/tree/main/pkg/providers for more details.
 	// Valid values are: [interactive, device, spiffe, google-workload-identity, google-impersonation, github-actions, filesystem, buildkite-agent]
@@ -205,6 +207,7 @@ func Get() (*Config, error) {
 		out.CredentialCache = value
 	}
 
+	out.LoginHint = envOrValue("GITSIGN_LOGIN_HINT", out.LoginHint)
 	out.LogPath = envOrValue("GITSIGN_LOG", out.LogPath)
 	out.RekorMode = envOrValue("GITSIGN_REKOR_MODE", out.RekorMode)
 	out.URLOpener = envOrValue("GITSIGN_URL_OPENER", out.URLOpener)
@@ -325,6 +328,8 @@ func applyGitOptions(out *Config, cfg map[string]string) {
 			out.LogPath = v
 		case strings.EqualFold(k, "gitsign.urlOpener"):
 			out.URLOpener = v
+		case strings.EqualFold(k, "gitsign.loginHint"):
+			out.LoginHint = v
 		case strings.EqualFold(k, "gitsign.connectorID"):
 			out.ConnectorID = v
 		case strings.EqualFold(k, "gitsign.tokenProvider"):

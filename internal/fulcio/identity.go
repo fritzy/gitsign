@@ -233,6 +233,10 @@ func (f *IdentityFactory) tokenGetter(ctx context.Context, cfg *config.Config) (
 	}
 
 	var authFlow oauthflow.TokenGetter = flow
+	if cfg.LoginHint != "" {
+		flow.ExtraAuthURLParams = append(flow.ExtraAuthURLParams, oauth2.SetAuthURLParam("login_hint", cfg.LoginHint))
+		authFlow = &hintTokenGetter{flow: flow, hint: cfg.LoginHint, ctx: ctx}
+	}
 
 	// If enabled, try OIDC token providers to get a token. unless the token provider is "interactive" (in which case always do default interactive flow).
 	var provider providers.Interface

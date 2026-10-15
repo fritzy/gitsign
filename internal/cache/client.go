@@ -113,10 +113,14 @@ func CredentialID(cfg *config.Config) (string, error) {
 	if cfg == nil {
 		return "", fmt.Errorf("missing signing configuration")
 	}
-	data, err := json.Marshal([]string{
+	fields := []string{
 		cfg.CommitterEmail, cfg.Issuer, cfg.ClientID, cfg.ConnectorID,
 		cfg.Fulcio, cfg.FulcioRoot, cfg.TokenProvider,
-	})
+	}
+	if cfg.LoginHint != "" {
+		fields = append(fields, cfg.LoginHint)
+	}
+	data, err := json.Marshal(fields)
 	if err != nil {
 		return "", err
 	}

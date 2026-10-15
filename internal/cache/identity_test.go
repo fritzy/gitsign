@@ -91,13 +91,14 @@ func TestCredentialIDIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, change := range map[string]func(*config.Config){
-		"email":     func(c *config.Config) { c.CommitterEmail = "bob@example.com" },
-		"issuer":    func(c *config.Config) { c.Issuer = "https://other.example.com" },
-		"fulcio":    func(c *config.Config) { c.Fulcio = "https://other.example.com" },
-		"root":      func(c *config.Config) { c.FulcioRoot = "/other/root.pem" },
-		"client":    func(c *config.Config) { c.ClientID = "other" },
-		"connector": func(c *config.Config) { c.ConnectorID = "other" },
-		"provider":  func(c *config.Config) { c.TokenProvider = "interactive" },
+		"email":      func(c *config.Config) { c.CommitterEmail = "bob@example.com" },
+		"issuer":     func(c *config.Config) { c.Issuer = "https://other.example.com" },
+		"fulcio":     func(c *config.Config) { c.Fulcio = "https://other.example.com" },
+		"root":       func(c *config.Config) { c.FulcioRoot = "/other/root.pem" },
+		"client":     func(c *config.Config) { c.ClientID = "other" },
+		"login hint": func(c *config.Config) { c.LoginHint = "other@example.com" },
+		"connector":  func(c *config.Config) { c.ConnectorID = "other" },
+		"provider":   func(c *config.Config) { c.TokenProvider = "interactive" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			cfg := base
